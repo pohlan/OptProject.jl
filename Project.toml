@@ -2,3 +2,6 @@ name = "OptProject"
 uuid = "b2d16757-1e2d-4064-9664-3c37289bcda7"
 authors = ["Annegret Pohle <apohle@ethz.ch>"]
 version = "0.1.0"
+
+[deps]
+PyPlot = "d330b81b-6aea-500a-939a-2ce795aea3ee"
