@@ -1,12 +1,12 @@
 using OptProject, PyPlot
 tr(A) = transpose(A)
 
-u1 = 0.0
-un = 0.0
+a = 0.0
+b = 0.0
 n  = 41
-f  = ones(n); f[18:22] .= 1 # source term
+f  = ones(n+2); f[18:22] .= 1 # source term
 
-Q, c, d = build_Q_c(;u1,un,n,f)
+Q, c, d = build_Q_c(;a,b,n,f)
 
 # solve
 ustar = Q \ c
