@@ -4,71 +4,61 @@ function newton(f, df, ddf, x0; tol=1e-8, maxiters=10^3)
         xk = xk - ddf(xk) \ df(xk)
         if norm(df(xk)) < tol
             println("Solution found after $it iterations.")
-            if all(eigen(ddf(xk)).values .< 0)
-                warning("Solution is a maximum.")
-            elseif any(eigen(ddf(xk)).values .<= 0)
-                warning("Solution is neither a maximum nor a minimum.")
+            if !all(eigen(ddf(xk)).values .>= 0)
+                warning("Solution is not a minimum.")
             end
             return xk, it
         end
     end
-    error("No solution after $maxiters iterations")
-end # function
+    error("No solution found after $maxiters iterations")
+end  # function
 
 """
 Quasi-Newton: Symmetric rank-one or BFGS
 """
-function quasi_Newton(x0, f, df=nothing;
+function quasi_Newton(x0, f, df;
                       method=:BFGS,      # either :sr1 or :BFGS
                       tol=1e-8, maxiters=10^4,
                       # for backtracking:
                       μ=1e-4,       # sufficient decrease
                       ρ=0.5)        # backtracking by halving)
+    n  = length(x0)
     xk = x0
-    n  = length(xk)
-
-    if df === nothing
-        df = xk -> fdgrad(xk,f)   # finite difference approx. of derivative
-    end
-
-    B = I(n)
     dfxk = df(xk)
+    B = I(n)
     for k = 1:maxiters
         if norm(dfxk) < tol
-            println("Solution found after $k iterations.")
             return xk, k
         end
         pk = - B \ dfxk
 
         if only(transpose(dfxk) * pk) >= 0.0
-            @warn "Non-descent direction at step $k .. revert to steepest-descent."
             pk = -dfxk
         end
+        # update xk
         α = bt(xk,pk,dfxk,f;μ,ρ)
         oldxk = xk
         olddfxk = dfxk
         xk = xk + α * pk
 
+        # update Bk
         dfxk = df(xk)
         sk = xk - oldxk
         yk = dfxk - olddfxk
-
         if method == :sr1               # symmetric rank 1 update
             v  = yk - B * sk
             denom = transpose(v) * sk
             if denom == 0
-                println("Solution found after $k iterations.")
                 return xk, k
             end
             B = B + v * transpose(v / denom)
         elseif method == :BFGS          # BFGS update
             w = B*sk
-            den = only(transpose(sk) * w)
-            if den == 0 || only(transpose(yk)*sk) == 0
-                println("Solution found after $k iterations.")
+            denom = transpose(sk) * w
+            if denom == 0
                 return xk, k
             end
-            B = B - w * transpose(w) ./ den + (yk*transpose(yk)) ./ (transpose(yk)*sk)
+            B = B - w * transpose(w) ./ denom + (yk*transpose(yk)) ./ (transpose(yk)*sk)
         end
     end
     error("No solution found after $maxiters iterations.")
