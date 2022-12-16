@@ -3,26 +3,26 @@ close("all") # close all open figures
 rcParams = PyPlot.PyDict(PyPlot.matplotlib."rcParams")
 rcParams["font.size"] = 34
 
-function make_ϕ(u,a,b,p,Δx,f)
+function make_f(u,a,b,p,Δx,g)
     du_1   = abs((u[1]-a)/Δx)^(p+1)
     du_end = abs((b-u[end])/Δx)^(p+1)
     du_mid = sum(abs.((u[2:end]-u[1:end-1])/Δx).^(p+1))
-    uf     = sum(u.*f[2:end-1]) + (a*f[1] + b*f[end])/2
+    uf     = sum(u.*g[2:end-1]) + (a*g[1] + b*g[end])/2
     return  Δx/(p+1) * (du_1 + du_mid + du_end) - uf * Δx
 end
 
-function make_dϕ(u,a,b,p,f,Δx)
+function make_df(u,a,b,p,g,Δx)
     ϵ            = eps()
     ddu          = zeros(length(u))
     ddu[2:end-1] = abs.(u[2:end-1] .- u[1:end-2] .+ ϵ).^(p-1) .* (u[2:end-1] .- u[1:end-2]) .-
                    abs.(u[3:end]   .- u[2:end-1] .+ ϵ).^(p-1) .* (u[3:end]   .- u[2:end-1])
     ddu[1]       = abs(u[1]-a+ϵ)^(p-1) * (u[1]-a) - abs(u[2]-u[1]+ϵ)^(p-1) * (u[2]-u[1])
     ddu[end]     = abs(u[end]-u[end-1]+ϵ)^(p-1) * (u[end]-u[end-1]) - abs(b-u[end]+ϵ)^(p-1) * (b-u[end])
-    dϕ           = ddu/Δx^p - f[2:end-1]*Δx
-    return dϕ
+    df           = ddu/Δx^p - g[2:end-1]*Δx
+    return df
 end
 
-function make_ddϕ(u,a,b,p,Δx)
+function make_ddf(u,a,b,p,Δx)
     ϵ = eps()
     n = length(u)
     A = zeros(n,n)
@@ -69,20 +69,20 @@ for (i,p) in enumerate(ps)
         println("Running for n=$n...")
         Δx = 1.0 / (n+1)   # grid spacing
         x0 = zeros(n,1);
-        f  = 10 * ones(n+2,1)
-        ϕ = u -> make_ϕ(u,a,b,p,Δx,f)
-        dϕ = u -> make_dϕ(u,a,b,p,f,Δx)
-        ddϕ = u-> make_ddϕ(u,a,b,p,Δx)
+        g  = 10 * ones(n+2,1)
+        f = u -> make_f(u,a,b,p,Δx,g)
+        df = u -> make_df(u,a,b,p,g,Δx)
+        ddf = u-> make_ddf(u,a,b,p,Δx)
 
         # "warmup" for measuring time
         if i == 1 && j ==1
-            newton(ϕ, dϕ, ddϕ, x0, maxiters=5*10^4)
-            quasi_Newton(x0, ϕ, dϕ, method=:sr1, maxiters=2*10^3)
-            optimize(ϕ, dϕ, x0, LBFGS(), inplace=false, Optim.Options(g_tol=1e-8,iterations=10^4))
+            newton(f, df, ddf, x0, maxiters=5*10^4)
+            quasi_Newton(x0, f, df, method=:sr1, maxiters=2*10^3)
+            optimize(f, df, x0, LBFGS(), inplace=false, Optim.Options(g_tol=1e-8,iterations=10^4))
         end
         # Newton
         tic = Base.time()
-        ustar_newton, it[:newton][i,j] = newton(ϕ, dϕ, ddϕ, x0, maxiters=3*10^3)
+        ustar_newton, it[:newton][i,j] = newton(f, df, ddf, x0, maxiters=3*10^3)
         t_wall[:newton][i,j] = Base.time() - tic
 
         # SR1
@@ -91,7 +91,7 @@ for (i,p) in enumerate(ps)
         while all(ust .== 0.0) && ρ < 1.0
             try
                 tic = Base.time()
-                ust,   it[:sr1][i,j]   = quasi_Newton(x0, ϕ, dϕ, method=:sr1, tol=1e-7, maxiters=3*10^3; ρ,μ)
+                ust,   it[:sr1][i,j]   = quasi_Newton(x0, f, df, method=:sr1, tol=1e-7, maxiters=3*10^3; ρ,μ)
                 t_wall[:sr1][i,j] = Base.time() - tic
             catch
                 ρ += 0.1; μ *= 10
@@ -105,7 +105,7 @@ for (i,p) in enumerate(ps)
         while all(ust .== 0.0) && ρ < 1.0
             try
                 tic = Base.time()
-                ust,   it[:BFGS][i,j]  = quasi_Newton(x0, ϕ, dϕ, method=:BFGS, tol=1e-7, maxiters=3*10^3; ρ,μ)
+                ust,   it[:BFGS][i,j]  = quasi_Newton(x0, f, df, method=:BFGS, tol=1e-7, maxiters=3*10^3; ρ,μ)
                 t_wall[:BFGS][i,j] = Base.time() - tic
             catch
                 ρ += 0.1; μ *= 10
@@ -115,7 +115,7 @@ for (i,p) in enumerate(ps)
 
         # LBFGS from Optim package
         tic = Base.time()
-        s = optimize(ϕ, dϕ, x0, LBFGS(), inplace=false, Optim.Options(g_tol=1e-7,iterations=10^4))
+        s = optimize(f, df, x0, LBFGS(), inplace=false, Optim.Options(g_tol=1e-7,iterations=10^4))
         if s.ls_success == false
             @warn "no success for LBFGS p=$p, n=$n."
         end

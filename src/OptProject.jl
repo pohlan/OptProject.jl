@@ -1,4 +1,3 @@
-__precompile__(false)
 module OptProject
 
     export build_Q_c, newton, quasi_Newton
